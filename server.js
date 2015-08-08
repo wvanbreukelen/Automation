@@ -14,13 +14,20 @@ var nativefs = require('./filesystem.js').filesystem;
 // Holds all application (plugin) actions
 var actions = [];
 
+// Holds all application deamons
+var deamons = [];
+
 // Start a new AutomationNode HTTP API server
 var request, response;
 
 writeConsole('Starting AutomationNode...');
 writeConsole('Loading all plugins listed in the application configuration...');
 
+// Register all of the plugins and their deamons
 registerPlugins();
+
+writeConsole('Starting plugins deamons...');
+registerDeamons();
 
 writeConsole('Succesfully loaded plugins!', 'SUCCESS');
 writeConsole('Starting build-in HTTP server...');
@@ -47,7 +54,7 @@ var server = http.createServer(function(request, response)
 		{
 			// Redirect the user to the given device ip address
 			// assuming that they are running a webserver on the default port is set to 80
-			writeConsole('Redirect user to default location');
+			writeConsole('Redirecting user to default location');
 			httpRedirect(response, ip);
 		} else {
 			output = instance.run();
@@ -122,12 +129,12 @@ function resolveAction(action)
 	try
 	{
 		var resolved = action();
-		consoleWrite('Successfully resolved action!', 'SUCCESS');
+		writeConsole('Successfully resolved action!', 'SUCCESS');
 
 		return resolved;
 	} catch (ex) {
-		consoleWrite('Failed to resolve action, see thrown exception', 'ERROR');
-		consoleWrite(ex.getMessage());
+		writeConsole('Failed to resolve action, see thrown exception', 'ERROR');
+		writeConsole(ex.getMessage());
 
 		return null;
 	}
@@ -181,6 +188,12 @@ function addAction(id, uri, action)
 	actions.push([id, uri, action]);
 }
 
+// Add a new deamon handler to the application
+function addDeamon(id, deamon)
+{
+	deamons.push([id, deamon]);
+}
+
 // Register all of the plugins that are listed in the configuration of the application
 function registerPlugins()
 {
@@ -195,8 +208,9 @@ function registerPlugin(name)
 {
 	writeConsole("Registering " + name + " plugin...");
 	writeConsole("Resolving plugins paths for " + name + " plugin...");
+
 	var pluginPath = nativefs.currentPath() + "plugins/" + name;
-	var actionPath = pluginPath + "/action.js";
+	var actionPath = pluginPath + "/main.js";
 
 	if (nativefs.directoryExists(pluginPath))
 	{
@@ -213,11 +227,34 @@ function registerPlugin(name)
 		return require(actionPath);
 	};
 
-	// Write action to array
-	addAction(name, 'test', action)
+	var deamon = function()
+	{
+		writeConsole("Registering deamons for " + actionPath);
+		return require(actionPath);
+	}
+
+	// Write action and deamon to array
+	addAction(name, 'test', action);
+	addDeamon(name, deamon);
 
 	writeConsole("Succesfully registered " + name + " plugin as an action!", 'SUCCESS');
 	writeConsole(actions[0]);
+}
+
+function registerDeamons()
+{
+	for (i = 0; i < deamons.length; i++)
+	{
+		deamonId = actions[i][0];
+		deamonFunction = actions[i][2];
+
+		console.log(deamonFunction);
+
+		deamon = deamonFunction();
+
+		writeConsole("Starting " + deamonId + " deamon or deamons");
+		deamon.startDeamon();
+	}
 }
 
 // Strip the trailing slash at the beginning of a basepath, so we can extract a URI
@@ -236,12 +273,3 @@ function cleanupJson(payload)
 {
 	return JSON.stringify(json, null, 4);
 }
-
-// Run a console command
-function cmd(command)
-{
-	return exec(command, puts);
-}
-
-// Puts function is needed for cmd function, do not tell me why ;)
-function puts(error, stdout, stderr) { sys.puts(stdout); }

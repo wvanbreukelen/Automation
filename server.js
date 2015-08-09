@@ -1,14 +1,14 @@
 // Application configuration
 var ip = '192.168.178.43';
 var port = 1337;
-var plugins = ['PIRSensor'];
+var plugins = ['PIRSensor', 'Testing'];
 
 // Basic requirements
 var http = require('http');
 var url = require('url');
 var sys = require('sys');
 var fs = require('fs');
-var exec = require('child_process').exec;
+var cmd = require('./command.js');
 var nativefs = require('./filesystem.js').filesystem;
 
 // Holds all application (plugin) actions
@@ -27,7 +27,7 @@ writeConsole('Loading all plugins listed in the application configuration...');
 registerPlugins();
 
 writeConsole('Starting plugins deamons...');
-registerDeamons();
+startDeamons();
 
 writeConsole('Succesfully loaded plugins!', 'SUCCESS');
 writeConsole('Starting build-in HTTP server...');
@@ -41,6 +41,12 @@ var server = http.createServer(function(request, response)
 	{
 		writeConsole('New incoming request...');
 		writeConsole('Calling with: ' + uri);
+
+		if (uri == "kill")
+		{
+			killServer(response);
+			// Code under here will not been executed
+		}
 
 		// Match the given uri with the corrent plugin action
 		var plugin = httpMatchAction(uri, response, request);
@@ -61,8 +67,10 @@ var server = http.createServer(function(request, response)
 
 			writeConsole('Writing response...');
 			writeResponse(response, output);
-			writeConsole('Written response');
+			writeConsole('Written response', 'SUCCESS');
 		}
+
+		writeConsole('Closed communication with client');
 	}
 }).listen(port, ip);
 
@@ -70,7 +78,15 @@ writeConsole('Listening for new requests at ' + ip + ' on port ' + port, 'SUCCES
 
 // FUNCTIONS UNDER HERE, PLEASE DO NOT POST PRODUCAL CODE UNDER HERE
 
-// Register a new device to the application
+/**
+ * Register a new device to the application
+ * @wvanbreukelen is this function needed anymore???
+ * @param  {string} deviceId   The devide ID
+ * @param  {string} deviceName The device name
+ * @param  {string} onCode     The code to turn the device on
+ * @param  {string} offCode    The code to turn the device off
+ * @return {mixed}
+ */
 function registerDevice(deviceId, deviceName, onCode, offCode)
 {
 	var payload = {
@@ -83,14 +99,24 @@ function registerDevice(deviceId, deviceName, onCode, offCode)
 	writeFs('devices.json', cleanupJson(payload));
 }
 
-// Write a message to the socket
+/**
+ * Write a message to the console window
+ * @param  {string} message The message to show
+ * @param  {string} level   The log level
+ * @return {mixed}
+ */
 function writeConsole(message, level)
 {
 	level = typeof level !== 'undefined' ? level : 'info';
 	console.log("[" + level.toUpperCase() + "] " + message);
 }
 
-// Write a new http response
+/**
+ * Write a new HTTP response
+ * @param  {object} response The response object
+ * @param  {string} text     The text that the response has to contain
+ * @return {mixed}
+ */
 function writeResponse(response, text)
 {
 	response.writeHead(200, {'Content-Type': 'text-plain'});
@@ -98,6 +124,12 @@ function writeResponse(response, text)
 	response.end();
 }
 
+/**
+ * Redirect the client to another page
+ * @param  {object} response The response object
+ * @param  {string} location The new location to redirect to
+ * @return {mixed}
+ */
 function httpRedirect(response, location)
 {
 	response.writeHead(302, {
@@ -107,7 +139,13 @@ function httpRedirect(response, location)
 	response.end();
 }
 
-// Write to filesystem
+/**
+ * Write something to the filesystem
+ * @wvanbreukelen Can been replaced with the native filesystem
+ * @param  {string} filename The new filename
+ * @param  {string} input    The input to write
+ * @return {bool}            Successfull or not
+ */
 function writeFs(filename, input)
 {
 	return fs.writeFile(filename, input, function (error)
@@ -121,7 +159,11 @@ function writeFs(filename, input)
 	});
 }
 
-// Resolve a specfic action
+/**
+ * Resolve a specfic action
+ * @param  {mixed} action The action to resolved
+ * @return {mixed}        The resolved action or a null response when failed
+ */
 function resolveAction(action)
 {
 	consoleWrite('Resolving action...');
@@ -140,7 +182,13 @@ function resolveAction(action)
 	}
 }
 
-// Match a request do a desired action
+/**
+ *  Match a request do a desired action
+ * @param  {string} uri      The current request URI
+ * @param  {object} response The response object
+ * @param  {object} request  The response object
+ * @return {mixed}           The results
+ */
 function httpMatchAction(uri, response, request)
 {
 	for (i = 0; i < actions.length; i++)
@@ -148,8 +196,6 @@ function httpMatchAction(uri, response, request)
 		actionId = actions[i][0];
 		actionUri = actions[i][1];
 		actionFunction = actions[i][2];
-
-		writeConsole('Current: ' + uri + ' defined: ' + actionUri);
 
 		if (actionUri == uri)
 		{
@@ -161,6 +207,11 @@ function httpMatchAction(uri, response, request)
 	return null;
 }
 
+/**
+ * Load a specfic plugin
+ * @param  {mixed} plugin The plugin itself
+ * @return {mixed}       The output
+ */
 function loadPlugin(plugin)
 {
 	writeConsole('Starting plugin loading...');
@@ -182,19 +233,31 @@ function loadPlugin(plugin)
 	}
 }
 
-// Add a action to the application
+/**
+ * Add a action to the application
+ * @param {string} id     Action ID
+ * @param {string} uri    The URI that the action will respond to
+ * @param {mixed} action  The action itself
+ */
 function addAction(id, uri, action)
 {
 	actions.push([id, uri, action]);
 }
 
-// Add a new deamon handler to the application
+/**
+ * Add a new deamon handler to the application
+ * @param {string} id     The deamon id
+ * @param {mixed} deamon The deamon itself
+ */
 function addDeamon(id, deamon)
 {
 	deamons.push([id, deamon]);
 }
 
-// Register all of the plugins that are listed in the configuration of the application
+/**
+ * Register all of the plugins that are listed in the configuration of the application
+ * @return {mixed}
+ */
 function registerPlugins()
 {
 	for (i = 0; i < plugins.length; i++)
@@ -203,7 +266,11 @@ function registerPlugins()
 	}
 }
 
-// Register a new plugin
+/**
+ * Register a new plugin
+ * @param  {string} name The plugin name
+ * @return {mixed}
+ */
 function registerPlugin(name)
 {
 	writeConsole("Registering " + name + " plugin...");
@@ -233,15 +300,52 @@ function registerPlugin(name)
 		return require(actionPath);
 	}
 
+	// Resolve the plugin URI that the plugin responds to
+	responduri = resolvePluginRespondURI(action());
+
+	if (responduri == null)
+	{
+		writeConsole("Cannot find respond URI for plugin " + name + "!", 'WARNING');
+		// Return a random number that acts as a URI so the plugin is still callable but in a super uneasy way
+		responduri = Math.floor((Math.random() * 1000) + 1);
+		writeConsole("Please call the " + name + " plugin with the following URL: " + resolveServerHttpLink() + responduri);
+	}
+
 	// Write action and deamon to array
-	addAction(name, 'test', action);
+	addAction(name, responduri, action);
 	addDeamon(name, deamon);
 
 	writeConsole("Succesfully registered " + name + " plugin as an action!", 'SUCCESS');
-	writeConsole(actions[0]);
+	//writeConsole(actions[0]);
 }
 
-function registerDeamons()
+/**
+ * Resolves the URI that the plugin responds to
+ * @param  {object} plugin The plugin object
+ * @return {mixed}        The results;
+ */
+function resolvePluginRespondURI(plugin)
+{
+	uri = plugin.uri;
+
+	if (typeof uri != 'undefined')
+	{
+		return uri;
+	} else {
+		return null;
+	}
+}
+
+function resolveServerHttpLink()
+{
+	return "http://" + ip + ":" + port + "/";
+}
+
+/**
+ * Start all of the registered deamons
+ * @return {mixed}
+ */
+function startDeamons()
 {
 	for (i = 0; i < deamons.length; i++)
 	{
@@ -254,10 +358,32 @@ function registerDeamons()
 
 		writeConsole("Starting " + deamonId + " deamon or deamons");
 		deamon.startDeamon();
+		writeConsole("Started " + deamonId + " deamon!", "SUCCESS");
 	}
 }
 
-// Strip the trailing slash at the beginning of a basepath, so we can extract a URI
+/**
+ * Stop all of the registered deamons
+ */
+function stopDeamons()
+{
+	for (i = 0; i < deamons.length; i++)
+	{
+		deamonKillFunction = actions[i][2];
+
+		deamon = deamonKillFunction();
+
+		writeConsole("Stopping " + deamonId + " deamon...");
+		deamon.stopDeamon();
+		writeConsole("Stopped deamon!", "SUCCESS");
+	}
+}
+
+/**
+ * Strip the trailing slash at the beginning of a basepath, so we can extract a URI
+ * @param  {string} basepath The basepath to Strip
+ * @return {string}          The stripped basepath, the URI
+ */
 function stripTrailingSlash(basepath)
 {
     if (basepath.substr(0, 1) === '/')
@@ -268,8 +394,33 @@ function stripTrailingSlash(basepath)
     return basepath;
 }
 
-// Cleanup some JSON payload
+/**
+ * Cleanup some JSON payload for better readability
+ * @param {string} The JSON payload to cleanup
+ * @return {string} The cleanup JSON payload
+ */
 function cleanupJson(payload)
 {
 	return JSON.stringify(json, null, 4);
+}
+
+/**
+ * Kill the server
+ */
+function killServer(response)
+{
+	writeConsole("Killing server...");
+	stopDeamons();
+	writeConsole("Killed plugin deamons!", "SUCCESS");
+	writeConsole("Writing final response...");
+
+	writeResponse(response, "Killed server on port " + port + "!");
+	writeConsole("Written response", 'SUCCESS');
+	writeConsole("Stopping main server...");
+	server.close();
+	writeConsole('Stopped main server', 'SUCCESS');
+	writeConsole('Stopping node.js execution, goodbye ;)');
+
+	cmd.run('sudo pkill -f node');
+	console.log('Done');
 }

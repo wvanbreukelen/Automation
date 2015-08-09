@@ -12,8 +12,14 @@ module.exports = {
 			{
 				if (error != null)
 				{
-					console.log("[ERROR] Command error: " + stderr);
+					if (stderr.length > 0)
+					{
+						console.log("[ERROR] Command error: " + stderr);
+					}
+					return null;
 				}
+
+				return stdout;
 			});
 
 			child();

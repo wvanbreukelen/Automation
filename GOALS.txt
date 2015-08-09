@@ -1,0 +1,7 @@
+- Make a interactive system between the webclient and the node server
+The plugin ' run ' function will be used to report information back to the webclient
+
+- Let the sensor's active listeners report back to the node server and maybe handle to execute other actions based on that
+report.
+
+- Create a caching meananism that saves states of the webclient itself.

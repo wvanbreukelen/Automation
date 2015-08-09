@@ -2,6 +2,7 @@
 var ip = '192.168.178.43';
 var port = 1337;
 var plugins = ['PIRSensor', 'Testing'];
+var debug = false;
 
 // Basic requirements
 var http = require('http');
@@ -10,6 +11,8 @@ var sys = require('sys');
 var fs = require('fs');
 var cmd = require('./command.js');
 var nativefs = require('./filesystem.js').filesystem;
+var cache = require('./handlers/cache.js');
+var data = require('./handlers/data.js');
 
 // Holds all application (plugin) actions
 var actions = [];
@@ -34,40 +37,52 @@ writeConsole('Starting build-in HTTP server...');
 
 var server = http.createServer(function(request, response)
 {
-	var uri = stripTrailingSlash(url.parse(request.url).pathname);
+	var raw_uri = stripTrailingSlash(url.parse(request.url).pathname);
+
+	uri = raw_uri.split("/")[0].split("\\")[0];
 
 	// Do not espect a response from a favicon.ico request
 	if (uri != "favicon.ico")
 	{
-		writeConsole('New incoming request...');
-		writeConsole('Calling with: ' + uri);
-
 		if (uri == "kill")
 		{
 			killServer(response);
 			// Code under here will not been executed
 		}
 
-		// Match the given uri with the corrent plugin action
-		var plugin = httpMatchAction(uri, response, request);
-
-		// Load that plugin
-		var instance = loadPlugin(plugin);
-		var output;
-
-		// Check if the given result is a actual callable object
-		if (instance == null)
+		if (uri == "data")
 		{
-			// Redirect the user to the given device ip address
-			// assuming that they are running a webserver on the default port is set to 80
-			writeConsole('Redirecting user to default location');
-			httpRedirect(response, ip);
-		} else {
-			output = instance.run();
+			pluginName = handleData(raw_uri);
 
-			writeConsole('Writing response...');
-			writeResponse(response, output);
-			writeConsole('Written response', 'SUCCESS');
+			writeConsole("Finished handling data for " + pluginName + "!", 'SUCCESS');
+
+			writeResponse(response, 'OK');
+			return;
+		} else {
+			writeConsole('New incoming request...');
+			writeConsole('Calling with: ' + uri);
+
+			// Match the given uri with the corrent plugin action
+			var plugin = httpMatchAction(uri, response, request);
+
+			// Load that plugin
+			var instance = loadPlugin(plugin);
+			var output;
+
+			// Check if the given result is a actual callable object
+			if (instance == null)
+			{
+				// Redirect the user to the given device ip address
+				// assuming that they are running a webserver on the default port is set to 80
+				writeConsole('Redirecting user to default location');
+				httpRedirect(response, ip);
+			} else {
+				output = instance.run();
+
+				writeConsole('Writing response...');
+				writeResponse(response, output);
+				writeConsole('Written response', 'SUCCESS');
+			}
 		}
 
 		writeConsole('Closed communication with client');
@@ -108,7 +123,12 @@ function registerDevice(deviceId, deviceName, onCode, offCode)
 function writeConsole(message, level)
 {
 	level = typeof level !== 'undefined' ? level : 'info';
-	console.log("[" + level.toUpperCase() + "] " + message);
+	if (level == 'info')
+	{
+		if (debug) console.log("[" + level.toUpperCase() + "]      " + message);
+	} else {
+		console.log("[" + level.toUpperCase() + "]      " + message);
+	}
 }
 
 /**
@@ -119,6 +139,12 @@ function writeConsole(message, level)
  */
 function writeResponse(response, text)
 {
+	if (typeof text === 'undefined' || text == null)
+	{
+		writeConsole("Cannot write empty response with value " + text + "!", 'ERROR');
+		return;
+	}
+
 	response.writeHead(200, {'Content-Type': 'text-plain'});
 	response.write(text);
 	response.end();
@@ -157,6 +183,11 @@ function writeFs(filename, input)
 			return true;
 		}
 	});
+}
+
+function handleData(uri)
+{
+	return data.resolve(uri);
 }
 
 /**
@@ -210,7 +241,7 @@ function httpMatchAction(uri, response, request)
 /**
  * Load a specfic plugin
  * @param  {mixed} plugin The plugin itself
- * @return {mixed}       The output
+ * @return {mixed}        The output
  */
 function loadPlugin(plugin)
 {
